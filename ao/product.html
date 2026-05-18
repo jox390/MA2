@@ -137,7 +137,7 @@
 <nav>
   <a href="index.html" class="nav-logo">M<span>/</span>A</a>
   <div class="nav-actions">
-    <div class="nav-cart" onclick="openOrderModal(this, 'محتويات السلة', 'حسب الاختيار')">
+    <div class="nav-cart">
       <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
       <div class="cart-badge" id="cartCountBadge">٠</div>
     </div>
@@ -190,29 +190,6 @@
     <div class="grid" id="similarGrid"></div>
   </section>
 </main>
-
-<!-- نافذة الطلب (Modal) لصفحة المنتج -->
-<div id="orderModal" class="modal-overlay">
-  <div class="modal-content">
-    <h3>إتمام الطلب</h3>
-    <div id="orderItemsList"></div>
-    <p id="orderTotalPrice" style="font-weight: bold; color: var(--accent);"></p>
-    <input type="text" id="custName" placeholder="الاسم بالكامل">
-    <input type="text" id="custPhone" placeholder="رقم الهاتف">
-    <select id="custGov" onchange="renderOrderItems()">
-      <option value="0" disabled selected>اختر المحافظة (لحساب الشحن)</option>
-      <option value="50">القاهرة والجيزة (٥٠ ج.م)</option>
-      <option value="60">الإسكندرية (٦٠ ج.م)</option>
-      <option value="80">بقية المحافظات (٨٠ ج.م)</option>
-    </select>
-    <input type="text" id="custAddress" placeholder="العنوان بالتفصيل">
-    <input type="text" id="custSize" placeholder="المقاس المطلوب">
-    <div style="display:flex; gap:10px; margin-top:10px">
-       <button class="btn-primary" style="flex:2" onclick="confirmOrder()">تأكيد الطلب</button>
-       <button class="btn-outline" style="flex:1" onclick="closeOrderModal()">إلغاء</button>
-    </div>
-  </div>
-</div>
 
 <script>
   const arabicDigits = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
@@ -281,17 +258,14 @@
   function renderSimilar(){
     const p = products.find(x=>x.id===currentProductId) || products[0];
 
-    const similar = products
-      .filter(x=>x.id!==p.id)
-      .filter(x=>x.category===p.category)
-      .slice(0,4);
-
     const grid = document.getElementById('similarGrid');
+    if (!grid) return;
     grid.innerHTML='';
 
-    // تفعيل الروابط بعد بناء الشبكة وضمان تعريف الـ grid
+    // ربط click واحد بدل inline onclick عشان أي تداخلات من clicks على img تختفي.
+    // (نحتاجه لأن العناصر بتتعمل ديناميكيًا داخل renderSimilar)
     setTimeout(() => {
-      grid?.querySelectorAll('[data-href]').forEach(el => {
+      grid.querySelectorAll('[data-href]').forEach(el => {
         if (el.dataset.bound === '1') return;
         el.dataset.bound = '1';
         el.addEventListener('click', () => {
@@ -305,6 +279,12 @@
         });
       });
     }, 0);
+
+
+    const similar = products
+      .filter(x=>x.id!==p.id)
+      .filter(x=>x.category===p.category)
+      .slice(0,4);
 
     similar.forEach(x=>{
       const card = document.createElement('div');
@@ -341,70 +321,68 @@
     }
   });
 
-  function addCurrentToCart(){
-    if(!selectedSize){
-      alert('اختر المقاس أولاً');
+  function addCurrentToCart(redirectToCheckout = false){
+
+    const p = products.find(x=>x.id===currentProductId) || products[0];
+    const size = selectedSize;
+
+    if (!size) {
+      // تنبيه بسيط عند عدم اختيار المقاس
+      const sizesWrap = document.getElementById('pSizes');
+      if (sizesWrap) {
+        sizesWrap.style.outline = '2px solid rgba(255,60,0,0.9)';
+        setTimeout(()=>{ sizesWrap.style.outline = 'none'; }, 300);
+      }
       return;
     }
 
-    const p = products.find(x=>x.id===currentProductId);
+    const nameWithSize = `${p.title} (${size})`;
+    const imgSrc = p.img;
+    const priceText = p.price;
 
     let cartItems = JSON.parse(localStorage.getItem('cartItems')) || [];
-    const itemName = `${p.title} (${selectedSize})`;
-    const existing = cartItems.find(i => i.name === itemName);
-    
+    const existing = cartItems.find(i => i.name === nameWithSize);
+
     if (existing) {
       existing.quantity = (existing.quantity || 1) + 1;
     } else {
-      cartItems.push({ name: itemName, price: p.price, img: p.img, quantity: 1 });
+      cartItems.push({ name: nameWithSize, price: priceText, img: imgSrc, quantity: 1 });
     }
 
     localStorage.setItem('cartItems', JSON.stringify(cartItems));
     loadCartBadge();
 
-    // 1. تغيير شكل الزر لإظهار نجاح الإضافة
-    const addBtn = document.getElementById('addBtn');
-    const originalText = addBtn.textContent;
-    addBtn.textContent = 'تمت الإضافة ✓';
-    addBtn.style.background = '#27ae60';
-    addBtn.style.color = '#ffffff';
-    // 1. إظهار شعار "تمت الإضافة"
-    let container = document.querySelector('.toast-container');
-    if(!container){
-      container = document.createElement('div');
-      container.className = 'toast-container';
-      document.body.appendChild(container);
-    }
-    const toast = document.createElement('div');
+    // Toast (حسب CSS الموجود داخل product.html)
+    let toast = document.getElementById('toastAdded');
+    if (toast) toast.remove();
+    toast = document.createElement('div');
+    toast.id = 'toastAdded';
     toast.className = 'toast-added';
-    toast.innerHTML = '<span>تمت الإضافة للسلة</span> <span>✓</span>';
-    container.appendChild(toast);
-    
-    // إزالة التنبيه بعد 3 ثوانٍ
-    setTimeout(() => toast.remove(), 3000);
+    toast.textContent = 'تمت الإضافة للسلة';
+    document.body.appendChild(toast);
+    setTimeout(()=>{ if (toast && toast.parentNode) toast.parentNode.removeChild(toast); }, 1600);
 
-    setTimeout(() => {
-      addBtn.textContent = originalText;
-      addBtn.style.background = '';
-      addBtn.style.color = '';
-    }, 2000);
-
-    // 2. النزول لأسفل لرؤية المنتجات الأخرى (المنتجات المشابهة)
-    document.querySelector('.section').scrollIntoView({ behavior: 'smooth' });
+    if (redirectToCheckout) {
+      // صفحة index.html فيها السلة من نفس localStorage، نرجع لها
+      window.location.href = 'index.html';
+    }
   }
 
-  function buyCurrent(){
-    openOrderModal(null, 'شراء مباشر', '');
-  }
 
-  document.getElementById('addBtn').addEventListener('click', addCurrentToCart);
-  document.getElementById('buyBtn').addEventListener('click', buyCurrent);
 
-  window.addEventListener('DOMContentLoaded', ()=>{
+  // ربط الأزرار بعد تحميل الصفحة
+  window.addEventListener('DOMContentLoaded', () => {
     loadCartBadge();
     renderProduct();
     renderSimilar();
+
+    const addBtn = document.getElementById('addBtn');
+    const buyBtn = document.getElementById('buyBtn');
+
+    if (addBtn) addBtn.addEventListener('click', () => addCurrentToCart(false));
+    if (buyBtn) buyBtn.addEventListener('click', () => addCurrentToCart(true));
   });
+
 </script>
 </body>
 </html>
